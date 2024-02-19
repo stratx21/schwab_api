@@ -861,8 +861,10 @@ class Schwab(SessionManager):
         }
 
         # Adding this header seems to be necessary.
-        self.headers['schwab-resource-version'] = '1.0'
-        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers, timeout=REQUEST_TIMEOUT)
+        
+        headers = dict(self.headers)
+        headers['schwab-resource-version'] = '1.0'
+        r = requests.post(urls.order_verification_v2(), json=data, headers=headers, timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
             print("bad status code. response: ", r.headers, ", ", r.content,  ", r status code: ", r.status_code)
             return [r.text], False, None
@@ -897,8 +899,9 @@ class Schwab(SessionManager):
         # if old_order_id != None:
         #     data["OrderStrategy"]["CancelOrderId"] = old_order_id
         #     data["OrderStrategy"]["OrderId"] = old_order_id
-        self.headers['schwab-resource-version'] = '1.0'
-        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers, timeout=REQUEST_TIMEOUT)
+        headers = dict(self.headers)
+        headers['schwab-resource-version'] = '1.0'
+        r = requests.post(urls.order_verification_v2(), json=data, headers=headers, timeout=REQUEST_TIMEOUT)
 
         if r.status_code != 200:
             print("limit buy status code wrong. r.text: ", r.text)
@@ -1007,9 +1010,10 @@ class Schwab(SessionManager):
         }
 
         # Adding this header seems to be necessary.
-        self.headers['schwab-resource-version'] = '1.0'
-
-        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers, timeout=REQUEST_TIMEOUT)
+        
+        headers = dict(self.headers)
+        headers['schwab-resource-version'] = '1.0'
+        r = requests.post(urls.order_verification_v2(), json=data, headers=headers, timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
             print("bad status code. response: ", r.headers, ", ", r.content,  ", r status code: ", r.status_code)
             return [r.text], False, None
@@ -1041,8 +1045,10 @@ class Schwab(SessionManager):
             data["OrderStrategy"]["OrderAffrmIn"] = True
         if not usingTokenAutoUpdate:
             self.update_token(token_type='update')
-        self.headers['schwab-resource-version'] = '1.0'
-        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers, timeout=REQUEST_TIMEOUT)
+        
+        headers = dict(self.headers)
+        headers['schwab-resource-version'] = '1.0'
+        r = requests.post(urls.order_verification_v2(), json=data, headers=headers, timeout=REQUEST_TIMEOUT)
 
         if r.status_code != 200:
             print("limit sell status code wrong. r.text: ", r.text)
@@ -1249,7 +1255,7 @@ class Schwab(SessionManager):
             "ConfirmCancelOrderId": 0,
             }
         self.headers["schwab-client-account"] = account_id
-        self.headers["schwab-resource-version"] = '2.0'
+        self.headers['schwab-resource-version'] = '2.0'
         # Web interface uses bearer token retrieved from:
         # https://client.schwab.com/api/auth/authorize/scope/api
         # and it seems to be good for 1800s (30min)
@@ -1323,7 +1329,9 @@ class Schwab(SessionManager):
             "ConfirmCancelOrderId": 0,
             }
         self.headers["schwab-client-account"] = account_id
-        self.headers["schwab-resource-version"] = '2.0'
+        
+        headers = dict(self.headers)
+        headers['schwab-resource-version'] = '2.0'
         # Web interface uses bearer token retrieved from:
         # https://client.schwab.com/api/auth/authorize/scope/api
         # and it seems to be good for 1800s (30min)
@@ -1331,7 +1339,7 @@ class Schwab(SessionManager):
             self.update_token(token_type='api')
         else:
             self.setHeaderToken(self.apiToken)
-        r1 = requests.post(urls.cancel_order_v2(), json=data, headers=self.headers, timeout=REQUEST_TIMEOUT)
+        r1 = requests.post(urls.cancel_order_v2(), json=data, headers=headers, timeout=REQUEST_TIMEOUT)
         if r1.status_code not in (200, 202):
             return [r1.text], False
 
@@ -1349,7 +1357,7 @@ class Schwab(SessionManager):
         # and it seems to be good for 1800s (30min)
         if not usingTokenAutoUpdate:
             self.update_token(token_type='api')
-        r2 = requests.post(urls.cancel_order_v2(), json=data, headers=self.headers, timeout=REQUEST_TIMEOUT)
+        r2 = requests.post(urls.cancel_order_v2(), json=data, headers=headers, timeout=REQUEST_TIMEOUT)
         if r2.status_code not in (200, 202):
             print("bad status code, in cancel")
             return [r2.text], False
@@ -1399,7 +1407,7 @@ class Schwab(SessionManager):
             "ConfirmCancelOrderId": 0,
             }
         self.headers["schwab-client-account"] = account_id
-        self.headers["schwab-resource-version"] = '2.0'
+        self.headers['schwab-resource-version'] = '2.0'
         # Web interface uses bearer token retrieved from:
         # https://client.schwab.com/api/auth/authorize/scope/api
         # and it seems to be good for 1800s (30min)
@@ -1452,14 +1460,15 @@ class Schwab(SessionManager):
         }
 
         # Adding this header seems to be necessary.
-        self.headers['schwab-resource-version'] = '1.0'
         self.headers["schwab-client-account"] = account_id
+        headers = dict(self.headers)
+        headers['schwab-resource-version'] = '1.0'
 
         if not usingTokenAutoUpdate:
             self.update_token(token_type='update')
         else:
             self.setHeaderToken(self.updateToken)
-        r = requests.post(urls.ticker_quotes_v2(), json=data, headers=self.headers, timeout=REQUEST_TIMEOUT)
+        r = requests.post(urls.ticker_quotes_v2(), json=data, headers=headers, timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
             return [r.text], False
 

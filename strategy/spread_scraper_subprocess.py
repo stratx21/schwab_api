@@ -1,3 +1,4 @@
+import json
 from queue import Queue
 import threading
 import time 
@@ -63,15 +64,23 @@ class ManageBuyThread(threading.Thread):
                     workingBuyOrderId = None
                 else:
                     # failed to cancel BUY order
-                    # print(TermColor.makeWarning("[DEBUG] failed to cancel BUY order. Messages: " + str(messages)))
+                    print(TermColor.makeWarning("[DEBUG] failed to cancel BUY order. Messages: " + str(messages)))
                     # assume it executed ( TODO IF executed ) 
-                    currentEquity += 1
-                    workingBuyOrderId = None
+                    messageCode = None
+                    try:
+                        messageCode = json.loads(messages[0])["Error"]["Code"]
+                    except Exception as e:
+                        print(TermColor.makeWarning("[DEBUG] error getting message code in ManageBuyThread cancel."))
+                    if messageCode == None or messageCode != "UnsupportedApiVersion":
+                        currentEquity += 1
+                        workingBuyOrderId = None
 
             if "tokenApi" in fromQueue.keys():
+                print(TermColor.makeWarning("[DEBUG] updating api token in buy thread"))
                 self.api.apiToken = fromQueue["tokenApi"]
 
             if "tokenUpdate" in fromQueue.keys():
+                print(TermColor.makeWarning("[DEBUG] updating update token in buy thread"))
                 self.api.updateToken = fromQueue["tokenUpdate"]
 
             if "stopProcess" in fromQueue.keys():
@@ -106,7 +115,10 @@ class ManageSellThread(threading.Thread):
                     if success:
                         workingSellOrderId = sellOrderId
                     else:
-                        print(TermColor.makeFail("[ERROR] failed to send SELL. Messages: " + str(messages)))
+                        if 'order may result in an oversold/overbought position' in messages[0]:
+                            print(TermColor.makeFail(f'[ERROR] failed to send SELL. Would cause negative position. current equity: {currentEquity}'))
+                        else:
+                            print(TermColor.makeFail("[ERROR] failed to send SELL. Messages: " + str(messages)))
                 except Exception as e:
                     print(TermColor.makeFail("[ERROR] error while sending SELL: " + e))
             
@@ -126,8 +138,14 @@ class ManageSellThread(threading.Thread):
                     # failed to cancel BUY order
                     # print(TermColor.makeWarning("[DEBUG] failed to cancel BUY order. Messages: " + str(messages)))
                     # assume it executed ( TODO IF executed ) 
-                    currentEquity -= 1
-                    workingSellOrderId = None
+                    messageCode = None
+                    try:
+                        messageCode = json.loads(messages[0])["Error"]["Code"]
+                    except Exception as e:
+                        print(TermColor.makeWarning("[DEBUG] error getting message code in ManageSellThread cancel."))
+                    if messageCode == None or messageCode != "UnsupportedApiVersion":
+                        currentEquity -= 1
+                        workingSellOrderId = None
 
             if "tokenApi" in fromQueue.keys():
                 self.api.apiToken = fromQueue["tokenApi"]
@@ -353,7 +371,7 @@ def runSpreadScraperSubprocess(
 
 
         except Exception as e:
-            print(TermColor.makeFail("[ERROR] failed managing scraping trades: " + e))
+            print(TermColor.makeFail("[ERROR] failed managing scraping trades: " + str(e)))
         
 
 

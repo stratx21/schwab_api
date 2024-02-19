@@ -74,7 +74,7 @@ class SubProcess():
 
 class SchwabSubprocessesManager(multiprocessing.Process):
     SLEEP_TIME = 2 # seconds
-    TOKEN_UPDATE_TIME = 30 # seconds     (note: leave buffer time)
+    TOKEN_UPDATE_TIME = 25 # seconds     (note: leave buffer time)
 
     def __init__(self, pipeWithDiscord, account_id, api: Schwab, **kwargs):
         super(SchwabSubprocessesManager, self).__init__()

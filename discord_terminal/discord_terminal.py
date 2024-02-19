@@ -124,7 +124,7 @@ def runDiscordTerminalProcess(
                 'Viper']
         await ctx.channel.send(f"Random Agent: {random.choice(Agents)}")
 
-    @client.command(aliases = ['startTicker', 'startProcess', 'spawnProcess', 'spawnTicker'])
+    @client.command(aliases = ['startTicker', 'startProcess', 'spawnProcess', 'spawnTicker', 'start', 'START', 'SPAWN'])
     @commands.is_owner()
     async def spawn(
         ctx,

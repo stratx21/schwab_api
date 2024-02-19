@@ -24,7 +24,7 @@ class SessionManager:
                 timeout=None
             )
         else:
-            self.browser = self.playwright.webkit.launch(
+            self.browser = self.playwright.chromium.launch(
                 headless=False,
                 timeout=None
             )
