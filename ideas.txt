@@ -1,0 +1,82 @@
+
+for selling issue: 
+  - send market order if ask price gets low enough 
+
+
+- send short sell WITH the buy ?
+  - instead of managing the buy THEN the sell
+
+
+end of night, 2/12:
+  - I think I just need to stick with the original idea, to update the orders when the B/A move. 
+  - execution:
+    - spawn thread or process
+    - can handle buy or sell management  
+    - this thread or process pulls quote every 0.5s
+    - ex - for buy - buy starts at bid + 0.02, - but if bid >= limit price, then replace order 
+    - issue : knowing when buy is successful to spawn a sell
+      - although, a sell will just fail if there are no positions 
+    - ISSUE: should I include a stoploss? 
+      - OCO bracket unaffected by cancelling one order - probably unaffected by editing too 
+      - although I may nbot be allowed to edit 
+      - CONCLUSION: ignore this for now? or just use for sell 
+
+
+IMPORTANT:
+  - IF bid is way below limit, replace limit 
+
+
+
+
+  2/14:
+    - use streaming service to get data 
+    - send async requests to process/thread to send off orders
+    - then it can manage multiple buy & sell orders at once 
+
+
+2/14:
+  - allow different processes to spawn for each ticker 
+  - each process can receive a new string from main process 
+  - string received will be the new token
+  - make thread in main process to refresh token 
+  - add command to spawn new process 
+  - add [TICKER/pid] in front of logs for each
+
+  - EXTRA: if I want to get fancy, I can get live data streamed and forward that data through the pipe to the subprocessses
+
+
+2/14:
+  - make a simple program to scrape $0.01-0.02 in the middle of the B/A spread constantly - fills faster - using a more voltatile stock 
+  - BASICALLY: do the same thing, but put orders at the middle between B/A 
+    - may need to be faster 
+    - if fills aren't faster, it will increase how much is lost when the stock moves. It HAS to fill fast 
+  - will require a token updater of some sort if this will be in cpp  
+  - WITH CURRENT CODE:
+    - process orders outside in main thread, then pass instructions to subthread? 
+    - issue is: constant buying and selling and it may not catch up to net zero
+
+  - TEST THIS WITH: make option to quickly get quote and send buy and sell limits in the middle 
+    - (will need to hold an extra share for sell to work)
+
+whacky idea based on above:
+  - hold 1 share 
+  - send in order, then START A THREAD TO CANCEL IN 3-5 SECONDS (can't check if not cancelled though - orders call too expensive) (could just instantly cancel though)
+    - NOTE - could set delay per specification 
+    - (NOTE: FOK won't work)
+  - spread orders by $0.01-$0.02 
+  - check positions. 
+  - if 0 shares held:
+    - don't send sell 
+  - if >1 shares held: 
+    - add 1 to qty of sell order (AND/OR dont buy another)
+  
+
+  in thread:
+    run():
+      if queue has data:
+        get data 
+        data = sharesNeededToBalance (-1 to sell 1, +1 to buy one)
+      send buy order
+      send sell order 
+  
+  NOTE: could use multiprocessing with this, just update the token for each process 
