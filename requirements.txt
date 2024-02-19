@@ -1,0 +1,6 @@
+requests
+pyotp
+playwright
+playwright_stealth
+python-vipaccess
+discord
