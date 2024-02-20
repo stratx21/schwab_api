@@ -4,6 +4,7 @@ import threading
 import time 
 
 from tools.terminal_colors import TermColor
+from tools import logger
 from schwab_api import Schwab
 
 
@@ -24,10 +25,11 @@ class ManageBuyThread(threading.Thread):
         self.queue = queue
         self.daemon = True
 
-        self.account_id = args[0]
-        self.api: Schwab = args[1]
-        self.ticker = args[2]
-        self.qty = args[3]
+        self.pipeWithDiscord = args[0]
+        self.account_id = args[1]
+        self.api: Schwab = args[2]
+        self.ticker = args[3]
+        self.qty = args[4]
 
     def run(self):
         global workingBuyOrderId
@@ -41,14 +43,14 @@ class ManageBuyThread(threading.Thread):
                         qty=self.qty,
                         account_id=self.account_id,
                         limit_buy_price=fromQueue["buy"],
-                        usingTokenAutoUpdate=True
+                        # usingTokenAutoUpdate=True
                     )
                     if success:
                         workingBuyOrderId = buyOrderId
                     else:
-                        print(TermColor.makeFail("[ERROR] failed to send BUY. Messages: " + str(messages)))
+                        logger.logError("failed to send BUY. Messages: " + str(messages), self.ticker, self.pipeWithDiscord)
                 except Exception as e:
-                    print(TermColor.makeFail("[ERROR] error while sending BUY: " + e))
+                    logger.logError("error while sending BUY: " + str(e), self.ticker, self.pipeWithDiscord)
 
             if "cancel" in fromQueue.keys():
                 messages, success = self.api.cancel_limit_order_v2(
@@ -58,7 +60,7 @@ class ManageBuyThread(threading.Thread):
                     "Buy",
                     fromQueue["cancel"],
                     self.qty,
-                    usingTokenAutoUpdate=True
+                    # usingTokenAutoUpdate=True
                 )
                 if success:
                     workingBuyOrderId = None
@@ -93,10 +95,11 @@ class ManageSellThread(threading.Thread):
         self.queue = queue
         self.daemon = True
 
-        self.account_id = args[0]
-        self.api: Schwab = args[1]
-        self.ticker = args[2]
-        self.qty = args[3]
+        self.pipeWithDiscord = args[0]
+        self.account_id = args[1]
+        self.api: Schwab = args[2]
+        self.ticker = args[3]
+        self.qty = args[4]
 
     def run(self):
         global workingSellOrderId
@@ -110,15 +113,15 @@ class ManageSellThread(threading.Thread):
                         qty=self.qty,
                         account_id=self.account_id,
                         limit_price=fromQueue["sell"],
-                        usingTokenAutoUpdate=True
+                        # usingTokenAutoUpdate=True
                     )
                     if success:
                         workingSellOrderId = sellOrderId
                     else:
                         if 'order may result in an oversold/overbought position' in messages[0]:
-                            print(TermColor.makeFail(f'[ERROR] failed to send SELL. Would cause negative position. current equity: {currentEquity}'))
+                            logger.logError(f'failed to send SELL. Would cause negative position. current equity: {currentEquity}', self.ticker, self.pipeWithDiscord)
                         else:
-                            print(TermColor.makeFail("[ERROR] failed to send SELL. Messages: " + str(messages)))
+                            logger.logError("failed to send SELL. Messages: " + str(messages), self.ticker, self.pipeWithDiscord)
                 except Exception as e:
                     print(TermColor.makeFail("[ERROR] error while sending SELL: " + e))
             
@@ -130,7 +133,7 @@ class ManageSellThread(threading.Thread):
                     "Sell",
                     fromQueue["cancel"],
                     self.qty,
-                    usingTokenAutoUpdate=True
+                    # usingTokenAutoUpdate=True
                 )
                 if success:
                     workingSellOrderId = None
@@ -168,7 +171,8 @@ def getBuySellPriceAdjustmentsFromProfitMargin(profitMargin): # returns   [buy a
 
 
 def runSpreadScraperSubprocess(
-        pipeFromParent,   # read this pipe to hear from parent 
+        pipeFromParent,   # read this pipe to hear from parent (subprocess manager)
+        pipeWithDiscord,  # write to this pipe to write to discord
         api: Schwab,      # the API access
         account_id,
         ticker,           # stock ticker 
@@ -192,9 +196,9 @@ def runSpreadScraperSubprocess(
     global workingSellOrderId
 
     # setup buy and sell threads 
-    buyThread = ManageBuyThread(Queue(), args=(account_id, api, ticker, qty))
+    buyThread = ManageBuyThread(Queue(), args=(pipeWithDiscord, account_id, api, ticker, qty))
     buyThread.start()
-    sellThread = ManageSellThread(Queue(), args=(account_id, api, ticker, qty))
+    sellThread = ManageSellThread(Queue(), args=(pipeWithDiscord, account_id, api, ticker, qty))
     sellThread.start()
 
     ######################################################################################
@@ -232,7 +236,7 @@ def runSpreadScraperSubprocess(
                     isStopping = True
                 
             except Exception as e:
-                print(TermColor.makeFail("[ERROR] failed receing data from pipe, under ticker \"" + ticker + "\": " + str(e)))
+                logger.logError("failed receing data from pipe, under ticker \"" + ticker + "\": " + str(e), ticker, pipeWithDiscord)
     
         # stop process if done 
         if isStopping and currentEquity == maintainedEquity and workingBuyOrderId == None and workingSellOrderId == None:
@@ -245,10 +249,10 @@ def runSpreadScraperSubprocess(
                 "stopProcess": 0,
             })
             buyThread.join()
-            print(TermColor.makeWarning("[END] buy thread ended"))
+            print(TermColor.makeWarning(f'[END] {ticker} BUY thread ended'))
             sellThread.join()
-            print(TermColor.makeWarning("[END] sell thread ended"))
-            pipeFromParent.send({
+            print(TermColor.makeWarning(f'[END] {ticker} SELL thread ended'))
+            pipeWithDiscord.send({
                 "stopProcessSuccess": ticker
             })
             return
@@ -258,7 +262,11 @@ def runSpreadScraperSubprocess(
         
         # get quote 
         try:
-            bid, ask = api.getBidAsk(ticker, account_id, usingTokenAutoUpdate=True)
+            bid, ask = api.getBidAsk(
+                ticker,
+                account_id,
+                # usingTokenAutoUpdate=True
+            )
             avgOfSpread = round((ask + bid)/2, 2)
             
             newBuyPrice = avgOfSpread - buyPriceAdjustment
@@ -371,7 +379,7 @@ def runSpreadScraperSubprocess(
 
 
         except Exception as e:
-            print(TermColor.makeFail("[ERROR] failed managing scraping trades: " + str(e)))
+            logger.logError("failed managing scraping trades: " + str(e), ticker, pipeWithDiscord)
         
 
 

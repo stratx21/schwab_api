@@ -73,14 +73,13 @@ def runDiscordTerminalProcess(
     client = commands.Bot("!", intents=intents, owner_id=ownerId)
 
     discordUtils = DiscordUtils(CONFIG_JSON_FILE_NAME, client)
-    generalChannel = discordUtils.getChannel("general")
-    logsChannel = discordUtils.getChannel("logs")
+    logsChannel = None
 
     appManager = SchwabManager(account_id, api)
     
     @tasks.loop(seconds=1)
     async def timer():
-        
+        logsChannel = discordUtils.getChannel("logs")
         while appManager.pollAppPipe(): # has data
             data = appManager.receiveFromAppPipe()
             # await generalChannel.send(f'data from pipe to discord: {str(data)}')
@@ -89,8 +88,17 @@ def runDiscordTerminalProcess(
                 await logsChannel.send('Stopping discord process. End process status is normal.')
                 return 0
             if "stopProcessSuccess" in data.keys():
-                print("stopping process for ticker " + data["stopProcessSuccess"] + " !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 await logsChannel.send(f'[COMMAND] successfully stopped process for ticker {data["stopProcessSuccess"]}.')
+            if "rareError" in data.keys():
+                tickerstr = (f' [{data["ticker"]}]') if ("ticker" in data.keys() and data["ticker"] != None) else ""
+                importantChannel = discordUtils.getChannel("important")
+                await logsChannel.send(f'[RARE ERROR]{tickerstr} {data["rareError"]}')
+                await importantChannel.send(f'[RARE ERROR]{tickerstr} {data["rareError"]}')
+            if "error" in data.keys():
+                tickerstr = (f' [{data["ticker"]}]') if "ticker" in data.keys() else ""
+                await logsChannel.send(f'[ERROR]{tickerstr} {data["error"]}')
+                
+
 
 
 

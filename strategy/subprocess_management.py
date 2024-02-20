@@ -1,11 +1,10 @@
 from schwab_api import Schwab
 import strategy.spread_scraper_subprocess as spread_scraper_subprocess
 from tools.terminal_colors import TermColor
+from tools import logger
 
 import datetime
 import multiprocessing
-from queue import Queue
-import threading
 import time
 
 
@@ -14,6 +13,9 @@ class SchwabManager():
         self.pipeWithApp, child_connection = multiprocessing.Pipe()
         self.subProcessManagerProcess = SchwabSubprocessesManager(child_connection, account_id, api)
         self.subProcessManagerProcess.start()
+
+        # supposed to be used for the subprocesses to send things to discord. can be used here to log to discord too. weird architecture doing this.
+        self._pipeToDiscord = child_connection 
     
     def stopAll(self):
         print(TermColor.makeWarning("Sending STOP signal to subprocess manager process"))
@@ -44,7 +46,7 @@ class SchwabManager():
             })
             return True
         except Exception as e:
-            print(TermColor.makeFail("[ERROR] failed to send data to pipe to spawn subprocess: " + str(e)))
+            logger.logRareError("failed to send data to pipe to spawn subprocess: " + str(e), ticker, self._pipeToDiscord)
             return False
     
     def stopTicker(self, ticker):
@@ -93,8 +95,8 @@ class SchwabSubprocessesManager(multiprocessing.Process):
                 if self.checkInputQueue():
                     return 
             except Exception as e:
-                print(TermColor.makeFail("[ERROR] failed to check input queue in SchwabSubprocessesManager: " + e))
-            self.refreshToken()
+                logger.logRareError("failed to check input queue in SchwabSubprocessesManager: " + e, None, self.pipeWithDiscord)
+            # self.refreshToken()
             time.sleep(SchwabSubprocessesManager.SLEEP_TIME)
     
     def refreshToken(self):
@@ -140,7 +142,7 @@ class SchwabSubprocessesManager(multiprocessing.Process):
                         self.subprocesses[ticker].join()
                         del self.subprocesses[ticker]
                     else: # ticker not in subprocesses
-                        print(TermColor.makeFail("[ERROR] ticker not found in subprocesses for stopTicker command."))
+                        logger.logRareError(f'ticker {ticker} not found in subprocesses for stopTicker command.', None, self.pipeWithDiscord)
                 else:
                     print(TermColor.makeFail("[ERROR] ticker not found in data received for stopTicker command."))
 
@@ -153,7 +155,7 @@ class SchwabSubprocessesManager(multiprocessing.Process):
                     qty = fromQueue["qty"]
                     timeBeforeCancel = fromQueue["timeBeforeCancel"]
                     if ticker in self.subprocesses.keys():
-                        print(TermColor.makeFail("[ERROR] ticker \"" + ticker + "\" already exists in subprocesses!"))
+                        logger.logRareError("ticker \"" + ticker + "\" already exists in subprocesses!", ticker, self.pipeWithDiscord)
                     else: # ticker does not yet exist in subprocesses dict 
                         # make new process
                         parent_connection, child_connection = multiprocessing.Pipe()
@@ -161,6 +163,7 @@ class SchwabSubprocessesManager(multiprocessing.Process):
                             target=spread_scraper_subprocess.runSpreadScraperSubprocess,
                             args=[
                                 child_connection,
+                                self.pipeWithDiscord,
                                 self.api,
                                 self.account_id,
                                 ticker,
@@ -174,6 +177,6 @@ class SchwabSubprocessesManager(multiprocessing.Process):
                         self.subprocesses[ticker] = SubProcess(subprocess, parent_connection)
                         subprocess.start()
                 except Exception as e:
-                    print(TermColor.makeFail("[ERROR] failed to spawn process in SchwabSubprocessesManager.checkInputQueue: " + str(e)))
+                    logger.logRareError("failed to spawn process in SchwabSubprocessesManager.checkInputQueue: " + str(e), ticker, self.pipeWithDiscord)
         
         return 0
