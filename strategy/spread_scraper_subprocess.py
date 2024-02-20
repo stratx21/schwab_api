@@ -76,11 +76,11 @@ class ManageBuyThread(threading.Thread):
                         workingBuyOrderId = None
 
             if "tokenApi" in fromQueue.keys():
-                print(TermColor.makeWarning("[DEBUG] updating api token in buy thread"))
+                # print(TermColor.makeWarning("[DEBUG] updating api token in buy thread"))
                 self.api.apiToken = fromQueue["tokenApi"]
 
             if "tokenUpdate" in fromQueue.keys():
-                print(TermColor.makeWarning("[DEBUG] updating update token in buy thread"))
+                # print(TermColor.makeWarning("[DEBUG] updating update token in buy thread"))
                 self.api.updateToken = fromQueue["tokenUpdate"]
 
             if "stopProcess" in fromQueue.keys():

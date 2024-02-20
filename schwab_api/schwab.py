@@ -1,3 +1,4 @@
+import datetime
 import json
 import urllib.parse
 import requests
@@ -1545,14 +1546,14 @@ class Schwab(SessionManager):
     def update_token(self, token_type='api'):
         r = self.session.get(f"https://client.schwab.com/api/auth/authorize/scope/{token_type}")
         if not r.ok:
-            raise ValueError(f"Error updating Bearer token: {r.reason}")
+            raise ValueError(f'Error updating Bearer token: {r.reason} at time {datetime.datetime.now().strftime("%I:%M:%S%p on %D")}')
         token = json.loads(r.text)['token']
         self.setHeaderToken(token)
         return token
     
     def update_both_tokens(self):
-        self.apiToken = self.update_token(token_type='api')
         self.updateToken = self.update_token(token_type='update')
+        self.apiToken = self.update_token(token_type='api')
         return self.apiToken, self.updateToken
     
     def setHeaderToken(self, token):

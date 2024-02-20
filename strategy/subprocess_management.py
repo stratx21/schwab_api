@@ -2,6 +2,7 @@ from schwab_api import Schwab
 import strategy.spread_scraper_subprocess as spread_scraper_subprocess
 from tools.terminal_colors import TermColor
 
+import datetime
 import multiprocessing
 from queue import Queue
 import threading
@@ -109,7 +110,7 @@ class SchwabSubprocessesManager(multiprocessing.Process):
                     "tokenUpdate": newTokenUpdate,
                 })
 
-            print(TermColor.makeWarning("[DEBUG] token refreshed"))
+            print(TermColor.makeWarning(f'[DEBUG][{datetime.datetime.now().strftime("%I:%M:%S%p on %D")}] token refreshed'))
 
     def checkInputQueue(self):
         # get info from queue - retrieve user input 
