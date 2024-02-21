@@ -38,7 +38,7 @@ class ManageBuyThread(threading.Thread):
             fromQueue = self.queue.get()
             if "buy" in fromQueue.keys():
                 try:
-                    messages, success, buyOrderId = self.api.trade_v2_limit_buy_order(
+                    messages, success, buyOrderId = self.api.trade_v2_buy_OCO_ONLY(
                         self.ticker,
                         qty=self.qty,
                         account_id=self.account_id,
@@ -108,11 +108,11 @@ class ManageSellThread(threading.Thread):
             fromQueue = self.queue.get()
             if "sell" in fromQueue.keys():
                 try:
-                    messages, success, sellOrderId = self.api.trade_v2_limit_sell_order(
+                    messages, success, sellOrderId = self.api.trade_v2_sell_OCO_ONLY(
                         self.ticker,
                         qty=self.qty,
                         account_id=self.account_id,
-                        limit_price=fromQueue["sell"],
+                        limit_sell_price=fromQueue["sell"],
                         # usingTokenAutoUpdate=True
                     )
                     if success:
