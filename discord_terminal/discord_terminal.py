@@ -1,4 +1,4 @@
-import asyncio
+import datetime
 from discord.ext import commands, tasks
 import discord
 import json
@@ -88,7 +88,7 @@ def runDiscordTerminalProcess(
                 await logsChannel.send('Stopping discord process. End process status is normal.')
                 return 0
             if "stopProcessSuccess" in data.keys():
-                await logsChannel.send(f'[COMMAND] successfully stopped process for ticker {data["stopProcessSuccess"]}.')
+                await logsChannel.send(f'[COMMAND] [{datetime.datetime.now().strftime("%I:%M:%S%p on %D")}] successfully stopped process for ticker {data["stopProcessSuccess"]}.')
             if "rareError" in data.keys():
                 tickerstr = (f' [{data["ticker"]}]') if ("ticker" in data.keys() and data["ticker"] != None) else ""
                 importantChannel = discordUtils.getChannel("important")

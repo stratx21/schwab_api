@@ -8,7 +8,7 @@ from tools import logger
 from schwab_api import Schwab
 
 
-LOOP_MINIMUM_RUNTIME = 3 # seconds
+LOOP_MINIMUM_RUNTIME = 1.5 # seconds
 
 
 # global vars - shared with threads 

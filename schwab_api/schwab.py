@@ -1444,6 +1444,8 @@ class Schwab(SessionManager):
     def getBidAsk(self, ticker, account_id, usingTokenAutoUpdate=False):
         try:
             quotes = self.quote_v2([ticker,], account_id, usingTokenAutoUpdate) # assume 'symbol' (in data) is correct - only getting one ticker
+            if quotes == None:
+                raise Exception("quotes is None in getBidAsk")
             quote = quotes[0]["quote"]
         except Exception as e:
             print("error getting bid/ask. quotes: " + str(quotes) + ", exception: ", e)
