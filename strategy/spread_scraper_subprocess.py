@@ -9,6 +9,7 @@ from schwab_api import Schwab
 
 
 LOOP_MINIMUM_RUNTIME = 1.5 # seconds
+LOOP_MINIMUM_RUNTIME_W_OCO = 10 # seconds
 
 
 # global vars - shared with threads 
@@ -32,6 +33,7 @@ class ManageBuyThread(threading.Thread):
         self.api: Schwab = args[2]
         self.ticker = args[3]
         self.qty = args[4]
+        self.trailingStopDollars = args[5] if len(args) > 5 else None
 
     def run(self):
         global workingBuyOrderId
@@ -40,11 +42,11 @@ class ManageBuyThread(threading.Thread):
             fromQueue = self.queue.get()
             if "buy" in fromQueue.keys():
                 try:
-                    messages, success, buyOrderId = self.api.trade_v2_buy_OCO_ONLY(
+                    messages, success, buyOrderId = self.api.trade_v2_limit_buy_order(
                         self.ticker,
                         qty=self.qty,
                         account_id=self.account_id,
-                        limit_buy_price=fromQueue["buy"],
+                        limit_price=fromQueue["buy"],
                         # usingTokenAutoUpdate=True
                     )
                     if success:
@@ -79,6 +81,24 @@ class ManageBuyThread(threading.Thread):
                         currentEquity += 1
                         workingBuyOrderId = None
 
+            if "buyOCOwTrailingStop" in fromQueue.keys():
+                if self.trailingStopDollars == None:
+                    logger.logRareError("trailing stop dollar amount is None in ManageBuyThread", self.ticker, self.pipeWithDiscord)
+                    continue
+                try:
+                    messages, success = self.api.trade_v2_buy_OCO_ONLY(
+                        self.ticker,
+                        qty=self.qty,
+                        account_id=self.account_id,
+                        limit_price=fromQueue["buyOCOwTrailingStop"],
+                        trailing_stop_dollars=self.trailingStopDollars
+                        # usingTokenAutoUpdate=True
+                    )
+                    if not success:
+                        logger.logError("failed to send BUY with OCO Trailing Stop. Messages: " + str(messages), self.ticker, self.pipeWithDiscord)
+                except Exception as e:
+                    logger.logError("error while sending BUY with OCO Trailing Stop: " + str(e), self.ticker, self.pipeWithDiscord)
+
             if "tokenApi" in fromQueue.keys():
                 # print(TermColor.makeWarning("[DEBUG] updating api token in buy thread"))
                 self.api.apiToken = fromQueue["tokenApi"]
@@ -102,6 +122,7 @@ class ManageSellThread(threading.Thread):
         self.api: Schwab = args[2]
         self.ticker = args[3]
         self.qty = args[4]
+        self.trailingStopDollars = args[5] if len(args) > 5 else None
 
     def run(self):
         global workingSellOrderId
@@ -110,11 +131,11 @@ class ManageSellThread(threading.Thread):
             fromQueue = self.queue.get()
             if "sell" in fromQueue.keys():
                 try:
-                    messages, success, sellOrderId = self.api.trade_v2_sell_OCO_ONLY(
+                    messages, success, sellOrderId = self.api.trade_v2_limit_sell_order(
                         self.ticker,
                         qty=self.qty,
                         account_id=self.account_id,
-                        limit_sell_price=fromQueue["sell"],
+                        limit_price=fromQueue["sell"],
                         # usingTokenAutoUpdate=True
                     )
                     if success:
@@ -151,6 +172,24 @@ class ManageSellThread(threading.Thread):
                     if messageCode == None or messageCode != "UnsupportedApiVersion":
                         currentEquity -= 1
                         workingSellOrderId = None
+
+            if "sellOCOwTrailingStop" in fromQueue.keys():
+                if self.trailingStopDollars == None:
+                    logger.logRareError("trailing stop dollar amount is None in ManageSellThread", self.ticker, self.pipeWithDiscord)
+                    continue
+                try:
+                    messages, success = self.api.trade_v2_sell_OCO_ONLY(
+                        self.ticker,
+                        qty=self.qty,
+                        account_id=self.account_id,
+                        limit_price=fromQueue["sellOCOwTrailingStop"],
+                        trailing_stop_dollars=self.trailingStopDollars
+                        # usingTokenAutoUpdate=True
+                    )
+                    if not success:
+                        logger.logError("failed to send SELL with OCO Trailing Stop. Messages: " + str(messages), self.ticker, self.pipeWithDiscord)
+                except Exception as e:
+                    logger.logError("error while sending SELL with OCO Trailing Stop: " + str(e), self.ticker, self.pipeWithDiscord)
 
             if "tokenApi" in fromQueue.keys():
                 self.api.apiToken = fromQueue["tokenApi"]
@@ -395,9 +434,160 @@ def runSpreadScraperSubprocess(
 
 
 
+def runSpreadScraperSubprocessOCOwTrailingStop(
+        pipeFromParent,      # read this pipe to hear from parent (subprocess manager)
+        pipeWithDiscord,     # write to this pipe to write to discord
+        api: Schwab,         # the API access
+        account_id,
+        ticker,              # stock ticker 
+        qty,                 # quantity of stock per order
+        profitMargin,        # in dollars (ex: 0.02 for 2 cents)
+        minBASpread,         # minimum diff between Ask-Bid required to initiate trade (in dollars)
+        maintainedEquity,    # count of shares at start. Will  try to maintain this number. Used to allow quick sells while holding.
+        trailingStopDollars  # dollars of trailing stop - ex: 0.07 for 7 cents trailing stop 
+):
+    print(TermColor.makeWarning("[WARNING] NOTE condition: need " + str(maintainedEquity) + " shares before start.."))
+
+    # price adjustments setup 
+    buyPriceAdjustment, sellPriceAdjustment = getBuySellPriceAdjustmentsFromProfitMargin(profitMargin)
+    
+    isStopping = False
+
+    # setup usable vars 
+    # global currentEquity 
+    # currentEquity = maintainedEquity
+
+    # setup buy and sell threads 
+    buyThread = ManageBuyThread(Queue(), args=(pipeWithDiscord, account_id, api, ticker, qty, trailingStopDollars))
+    buyThread.start()
+    sellThread = ManageSellThread(Queue(), args=(pipeWithDiscord, account_id, api, ticker, qty, trailingStopDollars))
+    sellThread.start()
+
+    ######################################################################################
+    # loop process:
+    while True:
+        loopStartTime = time.time()
+
+        #############################################################
+        # check for data in pipe 
+        while pipeFromParent.poll():
+            try:
+                fromPipe = pipeFromParent.recv()
+
+                if "tokenApi" in fromPipe.keys():
+                    newToken = fromPipe["tokenApi"]
+                    api.apiToken = newToken
+                    buyThread.queue.put({
+                        "tokenApi": newToken
+                    })
+                    sellThread.queue.put({
+                        "tokenApi": newToken
+                    })
+
+                if "tokenUpdate" in fromPipe.keys():
+                    newToken = fromPipe["tokenUpdate"]
+                    api.updateToken = newToken
+                    buyThread.queue.put({
+                        "tokenUpdate": newToken
+                    })
+                    sellThread.queue.put({
+                        "tokenUpdate": newToken
+                    })
+
+                if "stopProcess" in fromPipe.keys():
+                    print(TermColor.makeWarning("[END] ending buy and sell threads..."))
+
+                    buyThread.queue.put({
+                        "stopProcess": 0,
+                    })
+                    sellThread.queue.put({
+                        "stopProcess": 0,
+                    })
+                    buyThread.join()
+                    print(TermColor.makeWarning(f'[END] {ticker} BUY thread ended'))
+                    sellThread.join()
+                    print(TermColor.makeWarning(f'[END] {ticker} SELL thread ended'))
+                    pipeWithDiscord.send({
+                        "stopProcessSuccess": ticker
+                    })
+                    return
+                
+            except Exception as e:
+                logger.logError("failed receing data from pipe, under ticker \"" + ticker + "\": " + str(e), ticker, pipeWithDiscord)
+            
+
+        #############################################################
+        # manage scraping trades 
+        
+        # get quote 
+        try:
+            acctInfo = api.get_account_info_v2()
+            positionsForAcct = acctInfo[int(account_id)]["positions"]
+            positionCount = None
+            for position in positionsForAcct:
+                if position["symbol"] == ticker:
+                    positionCount = position["quantity"]
+                    break
+            if positionCount == None:
+                logger.logError("no position count found in positions for ticker \"" + ticker + "\"")
+                continue
+            print(TermColor.makeWarning(f'[DEBUG] found position count {positionCount} for ticker "{ticker}"'))
+
+
+            if positionCount == maintainedEquity:
+                bid, ask = api.getBidAsk(
+                    ticker,
+                    account_id,
+                    # usingTokenAutoUpdate=True
+                )
+
+                # if (should NOT initiate new scrape trade, due to BA spread being too small): then sleep and skip 
+                if ask - bid < minBASpread:
+                    timeToSleep = LOOP_MINIMUM_RUNTIME/2 - (time.time() - loopStartTime) # force loop iteration to half of the normal time 
+                    if timeToSleep > 0:
+                        time.sleep(timeToSleep) 
+                    continue
+
+                
+                avgOfSpread = round((ask + bid)/2, 2)
+                
+                newBuyPrice = avgOfSpread - buyPriceAdjustment
+                newSellPrice = avgOfSpread + sellPriceAdjustment
+
+                # send buy 
+                print(TermColor.makeWarning("[DEBUG] sending BUY with OCO Trailing Stop"))
+                buyThread.queue.put({
+                    "buyOCOwTrailingStop": newBuyPrice,
+                })
+
+                # send sell 
+                print(TermColor.makeWarning("[DEBUG] sending SELL with OCO Trailing Stop"))  
+                sellThread.queue.put({
+                    "sellOCOwTrailingStop": newSellPrice,
+                })
+
+
+        except Exception as e:
+            logger.logError("failed managing scraping trades with OCO: " + str(e), ticker, pipeWithDiscord)
+        
+
+
+        #####################
+        # runtime management 
+        timeDiffSecs = time.time() - loopStartTime
+        print(TermColor.makeWarning("[DEBUG] scraper subprocess iteration runtime: " + str(timeDiffSecs/1000.0) + " ms"))
+        if timeDiffSecs < LOOP_MINIMUM_RUNTIME_W_OCO:
+            time.sleep(LOOP_MINIMUM_RUNTIME_W_OCO - timeDiffSecs)
+
+
+
+
+
+
+
 """
     ideas:
-        - DONE can stick buy and sell order management in threads 
+        - [DONE] can stick buy and sell order management in threads 
 
 """
 

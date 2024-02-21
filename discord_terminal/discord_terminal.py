@@ -136,17 +136,18 @@ def runDiscordTerminalProcess(
     @commands.is_owner()
     async def spawn(
         ctx,
-        ticker = None,
-        profitMargin = 0.02,
-        maintainedEquity = 1,
+        ticker: str = None,
+        profitMargin = 0.03,
+        timeBeforeCancel = 3,
         minBASpread = 0.1,
         qty = 1,
-        timeBeforeCancel = 3
+        maintainedEquity = 1
     ):
         """Spawn new scraping process for specified ticker"""
         if ticker == None:
             await ctx.channel.send(discordUtils.makeFix("[COMMAND ERROR] must include ticker for spawn command!"))
             return
+        ticker = ticker.upper()
 
         success = appManager.spawn(ticker, profitMargin, maintainedEquity, minBASpread, qty, timeBeforeCancel)
         
@@ -155,6 +156,44 @@ def runDiscordTerminalProcess(
         else:
             await ctx.channel.send(discordUtils.makeRed("[ERROR] error starting scraper process for \"" + ticker + "\""))
     
+    @client.command(aliases = ['startOCO', 'startoco', 'spawnWTrailingStop', 'spawnoco'])
+    @commands.is_owner()
+    async def spawnOCO(
+        ctx,
+        ticker: str = None,
+        profitMargin = 0.03,
+        trailingStopDollars = 0.07,
+        minBASpread = 0.1,
+        qty = 1,
+        maintainedEquity = 1
+    ):
+        """Spawn new scraping process for specified ticker"""
+        if ticker == None:
+            await ctx.channel.send(discordUtils.makeFix("[COMMAND ERROR] must include ticker for spawn command!"))
+            return
+        ticker = ticker.upper()
+
+        success = appManager.spawnWTrailingStop(ticker, profitMargin, maintainedEquity, minBASpread, qty, trailingStopDollars)
+        
+        if success: 
+            await ctx.channel.send(discordUtils.makeGreen("[COMMAND] successfully started scraper with OCO process for \"" + ticker + "\""))
+        else:
+            await ctx.channel.send(discordUtils.makeRed("[ERROR] error starting scraper with OCO process for \"" + ticker + "\""))
+    
+    @client.command(aliases = ['getOrders',])
+    @commands.is_owner()
+    async def orders(
+        ctx,
+    ):
+        """Get open orders info"""
+
+        orders = appManager.getOpenOrders()
+        
+        # if orders != None: 
+        #     await ctx.channel.send(discordUtils.makeGreen("[COMMAND] orders: " + str(orders)))
+        # else:
+        #     await ctx.channel.send(discordUtils.makeRed("[ERROR] error getting orders"))
+
     @client.command(aliases = ['stopTicker','stopStrat'])
     @commands.is_owner()
     async def stop(ctx, ticker = None):
@@ -162,6 +201,7 @@ def runDiscordTerminalProcess(
         if ticker == None:
             await ctx.channel.send(discordUtils.makeFix("[COMMAND ERROR] must include ticker for stop command!"))
             return
+        ticker = ticker.upper()
 
         appManager.stopTicker(ticker)
         

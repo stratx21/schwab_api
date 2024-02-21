@@ -16,6 +16,9 @@ class SchwabManager():
 
         # supposed to be used for the subprocesses to send things to discord. can be used here to log to discord too. weird architecture doing this.
         self._pipeToDiscord = child_connection 
+
+        self.account_id = account_id
+        self.api = api
     
     def stopAll(self):
         print(TermColor.makeWarning("Sending STOP signal to subprocess manager process"))
@@ -48,7 +51,39 @@ class SchwabManager():
         except Exception as e:
             logger.logRareError("failed to send data to pipe to spawn subprocess: " + str(e), ticker, self._pipeToDiscord)
             return False
+        
+    def spawnWTrailingStop(
+            self,
+            ticker,
+            profitMargin = 0.02,
+            maintainedEquity = 1,
+            minBASpread = 0.1,
+            qty = 1,
+            trailingStopDollars = 0.07
+    ): # returns True/False for success case 
+        try:
+            self.pipeWithApp.send({
+                "command": "spawnWTrailingStop",
+                "ticker": ticker,
+                "profitMargin": profitMargin,
+                "maintainedEquity": maintainedEquity,
+                "minBASpread": minBASpread,
+                "qty": qty,
+                "trailingStopDollars": trailingStopDollars
+            })
+            return True
+        except Exception as e:
+            logger.logRareError("failed to send data to pipe to spawn subprocess with trailing stop: " + str(e), ticker, self._pipeToDiscord)
+            return False
     
+    def getOpenOrders(self):
+        try:
+            return self.api.orders_v2(self.account_id, openOnly=True)
+        except Exception as e:
+            logger.logError("failed to get orders: " + str(e), None, self._pipeToDiscord)
+        return None
+
+
     def stopTicker(self, ticker):
         print(TermColor.makeWarning(f'Sending STOP signal to subprocess for ticker {ticker}'))
         self.pipeWithApp.send({
@@ -178,5 +213,38 @@ class SchwabSubprocessesManager(multiprocessing.Process):
                         subprocess.start()
                 except Exception as e:
                     logger.logRareError("failed to spawn process in SchwabSubprocessesManager.checkInputQueue: " + str(e), ticker, self.pipeWithDiscord)
+            
+            if command == "spawnWTrailingStop": # spawn command 
+                try:
+                    ticker = fromQueue["ticker"]
+                    profitMargin = fromQueue["profitMargin"]
+                    maintainedEquity = fromQueue["maintainedEquity"]
+                    minBASpread = fromQueue["minBASpread"]
+                    qty = fromQueue["qty"]
+                    trailingStopDollars = fromQueue["trailingStopDollars"]
+                    if ticker in self.subprocesses.keys():
+                        logger.logRareError("ticker \"" + ticker + "\" already exists in subprocesses!", ticker, self.pipeWithDiscord)
+                    else: # ticker does not yet exist in subprocesses dict 
+                        # make new process
+                        parent_connection, child_connection = multiprocessing.Pipe()
+                        subprocess = multiprocessing.Process(
+                            target=spread_scraper_subprocess.runSpreadScraperSubprocessOCOwTrailingStop,
+                            args=[
+                                child_connection,
+                                self.pipeWithDiscord,
+                                self.api,
+                                self.account_id,
+                                ticker,
+                                qty,
+                                profitMargin,
+                                minBASpread,
+                                maintainedEquity,
+                                trailingStopDollars
+                            ]
+                        )
+                        self.subprocesses[ticker] = SubProcess(subprocess, parent_connection)
+                        subprocess.start()
+                except Exception as e:
+                    logger.logRareError("failed to spawn process with trailing stop in SchwabSubprocessesManager.checkInputQueue: " + str(e), ticker, self.pipeWithDiscord)
         
         return 0

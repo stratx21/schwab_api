@@ -779,7 +779,7 @@ class Schwab(SessionManager):
         ticker,
         qty,
         account_id,
-        limit_buy_price,
+        limit_price,
         old_order_id = None,
         old_price = None,
         duration=48,
@@ -809,17 +809,17 @@ class Schwab(SessionManager):
         
         # Handling formating of limit_price to avoid error.
         # Checking how many decimal places are in limit prices. 
-        decimal_places = len(str(float(limit_buy_price)).split('.')[1])
+        decimal_places = len(str(float(limit_price)).split('.')[1])
         limit_price_warning_buy = None
         # Max 2 decimal places allowed for price >= $1 and 4 decimal places for price < $1.
-        if limit_buy_price >= 1:
+        if limit_price >= 1:
             if decimal_places > 2:
-                limit_buy_price = round(limit_buy_price,2)
-                limit_price_warning_buy = f"For limit_buy_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_buy_price}"
+                limit_price = round(limit_price,2)
+                limit_price_warning_buy = f"For limit_buy_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_price}"
         else:
             if decimal_places > 4:
-                limit_buy_price = round(limit_buy_price,4)
-                limit_price_warning_buy = f"For limit_buy_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_buy_price}"
+                limit_price = round(limit_price,4)
+                limit_price_warning_buy = f"For limit_buy_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_price}"
         if not usingTokenAutoUpdate:
             self.update_token(token_type='update')
         else:
@@ -838,7 +838,7 @@ class Schwab(SessionManager):
                     "defaultCostBasisMethod":costBasis
                 },
                 "OrderType":"50", # Limit
-                "LimitPrice":str(limit_buy_price),
+                "LimitPrice":str(limit_price),
                 "StopPrice":"0",
                 "Duration":str(duration),
                 "AllNoneIn":False,
@@ -1074,11 +1074,11 @@ class Schwab(SessionManager):
         ticker,
         qty,
         account_id,
-        limit_buy_price,
+        limit_price,
         trailing_stop_dollars=0.07,
         duration=48,
         primary_security_type=46,
-        valid_return_codes = {0,10},
+        valid_return_codes = {0,10, 20},
         affirm_order=False,
         costBasis='FIFO'
         ):
@@ -1089,24 +1089,25 @@ class Schwab(SessionManager):
         # Handling formating of limit_price to avoid error.
         # Checking how many decimal places are in limit prices.
         
-        decimal_places = len(str(float(limit_buy_price)).split('.')[1])
+        decimal_places = len(str(float(limit_price)).split('.')[1])
         limit_price_warning = None
         # Max 2 decimal places allowed for price >= $1 and 4 decimal places for price < $1.
-        if limit_buy_price >= 1:
+        if limit_price >= 1:
             if decimal_places > 2:
-                limit_buy_price = round(limit_buy_price,2)
-                limit_price_warning = f"For limit_buy_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_buy_price}"
+                limit_price = round(limit_price,2)
+                limit_price_warning = f"For limit_buy_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_price}"
         else:
             if decimal_places > 4:
-                limit_buy_price = round(limit_buy_price,4)
-                limit_price_warning = f"For limit_buy_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_buy_price}"
+                limit_price = round(limit_price,4)
+                limit_price_warning = f"For limit_buy_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_price}"
 
         self.update_token(token_type='update')
 
         data = {
             "UserContext": {
                 "AccountId":str(account_id),
-                "AccountColor":0
+                "AccountColor":1,
+                "CustomerId": 0
             },
             "OrderStrategy": {
                 "OrderStrategyType":4, # OCO bracket
@@ -1115,44 +1116,45 @@ class Schwab(SessionManager):
                     {
                         "AllNoneIn":False,
                         "DoNotReduceIn":False,
-                        "Duration":48,
-                        "LimitPrice":str(limit_buy_price),
+                        "Duration":str(duration),
+                        "LimitPrice":str(limit_price),
                         "MinimumQuantity":0,
                         "OrderId":0,
                         "OrderLegs":[
                             {
-                                "Instruction": 53, # short sell
-                                "LeavesQuantity": 1,
-                                "Quantity": 1,
+                                "Instruction": 49,
+                                "LeavesQuantity": str(qty),
+                                "Quantity": str(qty),
                                 "SecurityType": 46,
                                 "Instrument": {"Symbol": ticker}
                             }
                         ],
                         "OrderStrategyType":1,
-                        "OrderType":50,
+                        "OrderType":"50",
                         "PrimarySecurityType":46,
-                        "StopPrice":0
+                        "StopPrice":"0"
                     },
                     {
                         "AllNoneIn":False,
                         "DoNotReduceIn":False,
-                        "Duration":48,
+                        "Duration":duration,
                         "LimitPrice":0,
                         "MinimumQuantity":0,
                         "OrderId":0,
                         "OrderLegs":[
                             {
-                                "Instruction":53, # short sell
-                                "Instrument":{"Symbol": ticker, "ItemIssueId": 0},
-                                "LeavesQuantity":1,
-                                "Quantity":1,
+                                "Instruction":49,
+                                "Instrument":{"Symbol": ticker},
+                                "LeavesQuantity":str(qty),
+                                "Quantity":str(qty),
                                 "SecurityType":46,
                             }
                         ],
                         "OrderStrategyType":1,
                         "OrderType":84,
                         "PrimarySecurityType":46,
-                        "StopPrice":0,
+                        "ReinvestDividend": False,
+                        "StopPrice":"0",
                         "TrailingStop": {       
                             "stopPriceLinkType":1,
                             "stopPriceOffset":trailing_stop_dollars
@@ -1200,7 +1202,165 @@ class Schwab(SessionManager):
 
         # Make the same POST request, but for real this time.
         data["UserContext"]["CustomerId"] = 0
-        data["OrderStrategy"]["OrderId"] = int(orderId)
+        data["OrderStrategy"]["OrderId"] = orderId
+        data["OrderProcessingControl"] = 2
+        if affirm_order:
+            data["OrderStrategy"]["OrderAffrmIn"] = True
+        self.update_token(token_type='update')
+        self.headers['schwab-resource-version'] = '1.0'
+        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers)
+
+        if r.status_code != 200:
+            return [r.text], False
+
+        response = json.loads(r.text)
+
+        messages = list()
+        if limit_price_warning is not None:
+            messages.append(limit_price_warning)
+        if "orderMessages" in response["orderStrategy"] and response["orderStrategy"]["orderMessages"] is not None:
+            for message in response["orderStrategy"]["orderMessages"]:
+                messages.append(message["message"])
+
+        if response["orderStrategy"]["orderReturnCode"] in valid_return_codes:
+            return messages, True
+
+        return messages, False
+    
+    def trade_v2_sell_OCO_ONLY(
+        self,
+        ticker,
+        qty,
+        account_id,
+        limit_price,
+        trailing_stop_dollars=0.07,
+        duration=48,
+        primary_security_type=46,
+        valid_return_codes = {0,10,20},
+        affirm_order=False,
+        costBasis='FIFO'
+        ):
+        """
+            trigger OCO with sell limit and trailing stop
+        """
+        
+        # Handling formating of limit_price to avoid error.
+        # Checking how many decimal places are in limit prices.
+        
+        decimal_places = len(str(float(limit_price)).split('.')[1])
+        limit_price_warning = None
+        # Max 2 decimal places allowed for price >= $1 and 4 decimal places for price < $1.
+        if limit_price >= 1:
+            if decimal_places > 2:
+                limit_price = round(limit_price,2)
+                limit_price_warning = f"For limit_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_price}"
+        else:
+            if decimal_places > 4:
+                limit_price = round(limit_price,4)
+                limit_price_warning = f"For limit_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_price}"
+
+        self.update_token(token_type='update')
+
+        data = {
+            "UserContext": {
+                "AccountId":str(account_id),
+                "AccountColor":1,
+                "CustomerId": 0
+            },
+            "OrderStrategy": {
+                "OrderStrategyType":4, # OCO bracket
+                "GroupOrderId":0,
+                "ChildOrders":[
+                    {
+                        "AllNoneIn":False,
+                        "DoNotReduceIn":False,
+                        "Duration":str(duration),
+                        "LimitPrice":str(limit_price),
+                        "MinimumQuantity":0,
+                        "OrderId":0,
+                        "OrderLegs":[
+                            {
+                                "Instruction": 50, # sell (short sell = 53)
+                                "LeavesQuantity": str(qty),
+                                "Quantity": str(qty),
+                                "SecurityType": 46,
+                                "Instrument": {"Symbol": ticker}
+                            }
+                        ],
+                        "OrderStrategyType":1,
+                        "OrderType":"50",
+                        "PrimarySecurityType":46,
+                        "StopPrice":"0"
+                    },
+                    {
+                        "AllNoneIn":False,
+                        "DoNotReduceIn":False,
+                        "Duration":duration,
+                        "LimitPrice":0,
+                        "MinimumQuantity":0,
+                        "OrderId":0,
+                        "OrderLegs":[
+                            {
+                                "Instruction":50, # sell (short sell = 53)
+                                "Instrument":{"Symbol": ticker},
+                                "LeavesQuantity":str(qty),
+                                "Quantity":str(qty),
+                                "SecurityType":46,
+                            }
+                        ],
+                        "OrderStrategyType":1,
+                        "OrderType":84,
+                        "PrimarySecurityType":46,
+                        "ReinvestDividend": False,
+                        "StopPrice":"0",
+                        "TrailingStop": {       
+                            "stopPriceLinkType":1,
+                            "stopPriceOffset":trailing_stop_dollars
+                        }
+                    }
+                ],
+                "OrderLegs":[
+                    {
+                        "Quantity":str(qty),
+                        "LeavesQuantity":str(qty),
+                        "Instrument":{"Symbol":ticker},
+                        "SecurityType":primary_security_type,
+                        "Instruction":50 # sell (short sell = 53)
+                    }
+                ]
+            },
+            # OrderProcessingControl seems to map to verification vs actually placing an order.
+            "OrderProcessingControl":1
+        }
+
+        # Adding this header seems to be necessary.
+        self.headers['schwab-resource-version'] = '1.0'
+
+        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers)
+        if r.status_code != 200:
+            return [r.text], False
+
+        response = json.loads(r.text)
+
+        orderId = response['orderStrategy']['orderId']
+        firstOrderLeg = response['orderStrategy']['orderLegs'][0]
+        if "schwabSecurityId" in firstOrderLeg:
+            data["OrderStrategy"]["OrderLegs"][0]["Instrument"]["ItemIssueId"] = firstOrderLeg["schwabSecurityId"]
+
+        
+        messages = list()
+        if limit_price_warning is not None:
+            messages.append(limit_price_warning)
+        for message in response["orderStrategy"]["orderMessages"]:
+            messages.append(message["message"])
+
+        # TODO: This needs to be fleshed out and clarified.
+        if response["orderStrategy"]["orderReturnCode"] not in valid_return_codes:
+            return messages, False
+
+        # Make the same POST request, but for real this time.
+        data["UserContext"]["CustomerId"] = 0
+        data["OrderStrategy"]["OrderId"] = orderId
         data["OrderProcessingControl"] = 2
         if affirm_order:
             data["OrderStrategy"]["OrderAffrmIn"] = True
@@ -1225,12 +1385,12 @@ class Schwab(SessionManager):
 
         return messages, False
 
-    def trade_v2_sell_OCO_ONLY(
+    def trade_v2_sell_OCO_ONLY_OLD(
         self,
         ticker,
         qty,
         account_id,
-        limit_sell_price,
+        limit_price,
         trailing_stop_dollars=0.07,
         duration=48,
         primary_security_type=46,
@@ -1245,24 +1405,24 @@ class Schwab(SessionManager):
         # Handling formating of limit_price to avoid error.
         # Checking how many decimal places are in limit prices.
         
-        decimal_places = len(str(float(limit_sell_price)).split('.')[1])
+        decimal_places = len(str(float(limit_price)).split('.')[1])
         limit_price_warning_sell = None
         # Max 2 decimal places allowed for price >= $1 and 4 decimal places for price < $1.
-        if limit_sell_price >= 1:
+        if limit_price >= 1:
             if decimal_places > 2:
-                limit_sell_price = round(limit_sell_price,2)
-                limit_price_warning_sell = f"For limit_sell_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_sell_price}"
+                limit_price = round(limit_price,2)
+                limit_price_warning_sell = f"For limit_sell_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_price}"
         else:
             if decimal_places > 4:
-                limit_sell_price = round(limit_sell_price,4)
-                limit_price_warning_sell = f"For limit_sell_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_sell_price}"
+                limit_price = round(limit_price,4)
+                limit_price_warning_sell = f"For limit_sell_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_price}"
 
         self.update_token(token_type='update')
 
         data = {
             "UserContext": {
                 "AccountId":str(account_id),
-                "AccountColor":0
+                "AccountColor":1
             },
             "OrderStrategy": {
                 "OrderStrategyType":4, # OCO bracket
@@ -1271,15 +1431,15 @@ class Schwab(SessionManager):
                     {
                         "AllNoneIn":False,
                         "DoNotReduceIn":False,
-                        "Duration":48,
-                        "LimitPrice":str(limit_sell_price),
+                        "Duration":duration,
+                        "LimitPrice":str(limit_price),
                         "MinimumQuantity":0,
                         "OrderId":0,
                         "OrderLegs":[
                             {
-                                "Instruction": 53, # short sell
-                                "LeavesQuantity": 1,
-                                "Quantity": 1,
+                                "Instruction": 50, # sell   (short sell is 53)
+                                "LeavesQuantity": str(qty),
+                                "Quantity": str(qty),
                                 "SecurityType": 46,
                                 "Instrument": {"Symbol": ticker}
                             }
@@ -1298,10 +1458,10 @@ class Schwab(SessionManager):
                         "OrderId":0,
                         "OrderLegs":[
                             {
-                                "Instruction":53, # short sell
+                                "Instruction":50, # sell
                                 "Instrument":{"Symbol": ticker, "ItemIssueId": 0},
-                                "LeavesQuantity":1,
-                                "Quantity":1,
+                                "LeavesQuantity": str(qty),
+                                "Quantity": str(qty),
                                 "SecurityType":46,
                             }
                         ],
@@ -1634,7 +1794,7 @@ class Schwab(SessionManager):
         response = json.loads(r.text)
         return response["quotes"]
 
-    def orders_v2(self, account_id=None):
+    def orders_v2(self, account_id=None, openOnly=False):
         """
         orders_v2 returns a list of orders for a Schwab Account. It is unclear to me how to filter by specific account.
 
@@ -1717,3 +1877,203 @@ class Schwab(SessionManager):
     def setHeaderToken(self, token):
         self.headers['authorization'] = f"Bearer {token}"
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def testBuyOCOthing(
+        self,
+        ticker,
+        qty,
+        account_id,
+        limit_price,
+        trailing_stop_dollars=0.07,
+        duration=48,
+        primary_security_type=46,
+        valid_return_codes = {0,10, 20},
+        affirm_order=False,
+        costBasis='FIFO',
+        newnum = 84
+        ):
+        """
+            trigger OCO with buy limit and trailing stop
+        """
+        
+        # Handling formating of limit_price to avoid error.
+        # Checking how many decimal places are in limit prices.
+        
+        decimal_places = len(str(float(limit_price)).split('.')[1])
+        limit_price_warning = None
+        # Max 2 decimal places allowed for price >= $1 and 4 decimal places for price < $1.
+        if limit_price >= 1:
+            if decimal_places > 2:
+                limit_price = round(limit_price,2)
+                limit_price_warning = f"For limit_buy_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_price}"
+        else:
+            if decimal_places > 4:
+                limit_price = round(limit_price,4)
+                limit_price_warning = f"For limit_buy_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_price}"
+
+        self.update_token(token_type='update')
+
+        data = {
+            "UserContext": {
+                "AccountId":str(account_id),
+                "AccountColor":1,
+                "CustomerId": 0
+            },
+            "OrderStrategy": {
+                "OrderStrategyType":4, # OCO bracket
+                "GroupOrderId":0,
+                "ChildOrders":[
+                    {
+                        "AllNoneIn":False,
+                        "DoNotReduceIn":False,
+                        "Duration":str(duration),
+                        "LimitPrice":str(limit_price),
+                        "MinimumQuantity":0,
+                        "OrderId":0,
+                        "OrderLegs":[
+                            {
+                                "Instruction": 49,
+                                "LeavesQuantity": str(qty),
+                                "Quantity": str(qty),
+                                "SecurityType": 46,
+                                "Instrument": {"Symbol": ticker}
+                            }
+                        ],
+                        "OrderStrategyType":1,
+                        "OrderType":"50",
+                        "PrimarySecurityType":46,
+                        "StopPrice":"0"
+                    },
+                    {
+                        "AllNoneIn":False,
+                        "DoNotReduceIn":False,
+                        "Duration":duration,
+                        "LimitPrice":0,
+                        "MinimumQuantity":0,
+                        "OrderId":0,
+                        "OrderLegs":[
+                            {
+                                "Instruction":49,
+                                "Instrument":{"Symbol": ticker},
+                                "LeavesQuantity":str(qty),
+                                "Quantity":str(qty),
+                                "SecurityType":46,
+                            }
+                        ],
+                        "OrderStrategyType":1,
+                        "OrderType":newnum,
+                        "PrimarySecurityType":46,
+                        "ReinvestDividend": False,
+                        "StopPrice":"0",
+                        "TrailingStop": {       
+                            "stopPriceLinkType":1,
+                            "stopPriceOffset":trailing_stop_dollars
+                        }
+                    }
+                ],
+                "OrderLegs":[
+                    {
+                        "Quantity":str(qty),
+                        "LeavesQuantity":str(qty),
+                        "Instrument":{"Symbol":ticker},
+                        "SecurityType":primary_security_type,
+                        "Instruction":49 # Buy
+                    }
+                ]
+            },
+            # OrderProcessingControl seems to map to verification vs actually placing an order.
+            "OrderProcessingControl":1
+        }
+
+        # Adding this header seems to be necessary.
+        self.headers['schwab-resource-version'] = '1.0'
+
+        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers)
+        if r.status_code != 200:
+            return [r.text], False
+
+        response = json.loads(r.text)
+
+        orderId = response['orderStrategy']['orderId']
+        firstOrderLeg = response['orderStrategy']['orderLegs'][0]
+        if "schwabSecurityId" in firstOrderLeg:
+            data["OrderStrategy"]["OrderLegs"][0]["Instrument"]["ItemIssueId"] = firstOrderLeg["schwabSecurityId"]
+
+        
+        messages = list()
+        if limit_price_warning is not None:
+            messages.append(limit_price_warning)
+        for message in response["orderStrategy"]["orderMessages"]:
+            messages.append(message["message"])
+
+        # TODO: This needs to be fleshed out and clarified.
+        if response["orderStrategy"]["orderReturnCode"] not in valid_return_codes:
+            return messages, False
+
+        # Make the same POST request, but for real this time.
+        data["UserContext"]["CustomerId"] = 0
+        data["OrderStrategy"]["OrderId"] = orderId
+        data["OrderProcessingControl"] = 2
+        if affirm_order:
+            data["OrderStrategy"]["OrderAffrmIn"] = True
+        self.update_token(token_type='update')
+        self.headers['schwab-resource-version'] = '1.0'
+        r = requests.post(urls.order_verification_v2(), json=data, headers=self.headers)
+
+        if r.status_code != 200:
+            return [r.text], False
+
+        response = json.loads(r.text)
+
+        messages = list()
+        if limit_price_warning is not None:
+            messages.append(limit_price_warning)
+        if "orderMessages" in response["orderStrategy"] and response["orderStrategy"]["orderMessages"] is not None:
+            for message in response["orderStrategy"]["orderMessages"]:
+                messages.append(message["message"])
+
+        if response["orderStrategy"]["orderReturnCode"] in valid_return_codes:
+            return messages, True
+
+        return messages, False
