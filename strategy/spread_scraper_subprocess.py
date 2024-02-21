@@ -17,6 +17,8 @@ workingSellOrderId = None
 currentEquity = 0
 
 
+OVERSOLD_ERROR_PARTIAL_STRING = 'order may result in an oversold/overbought position' 
+
 
 class ManageBuyThread(threading.Thread):
 
@@ -118,7 +120,7 @@ class ManageSellThread(threading.Thread):
                     if success:
                         workingSellOrderId = sellOrderId
                     else:
-                        if 'order may result in an oversold/overbought position' in messages[0]:
+                        if OVERSOLD_ERROR_PARTIAL_STRING in messages[0] or OVERSOLD_ERROR_PARTIAL_STRING in messages[1]:
                             logger.logError(f'failed to send SELL. Would cause negative position. current equity: {currentEquity}', self.ticker, self.pipeWithDiscord)
                         else:
                             logger.logError("failed to send SELL. Messages: " + str(messages), self.ticker, self.pipeWithDiscord)
