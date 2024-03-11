@@ -1,3 +1,8 @@
+Forked from https://github.com/itsjafer/schwab-api
+Additions and edits for custom orders and B/A spread scraping strategies
+
+
+
 # Schwab API
 
 **This is not an official API or even a stable recreation of a Charles Schwab API. Functionality may change with any updates made by Schwab. As of December 2023, this API continues to work as expected.**
